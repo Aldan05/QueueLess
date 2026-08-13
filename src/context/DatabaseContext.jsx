@@ -543,14 +543,47 @@ export const DatabaseProvider = ({ children }) => {
   }, []);
 
   const authenticateUser = async (email, password) => {
-    const response = await fetch(`${API_URL}/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password })
-    });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.message);
-    return data;
+    try {
+      const response = await fetch(`${API_URL}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message);
+      return data;
+    } catch (err) {
+      // Fallback for static deployments (e.g. GitHub Pages) when local backend server is unreachable
+      if (err.name === 'TypeError' || err.message.includes('fetch') || err.message.includes('NetworkError')) {
+        const cleanEmail = String(email).toLowerCase().trim();
+        if (cleanEmail === 'customer@queueless.com') {
+          return {
+            _id: '6a59a8441f37801592dcee03',
+            name: 'Demo Customer',
+            email: 'customer@queueless.com',
+            role: 'Customer'
+          };
+        }
+        if (cleanEmail === 'business@queueless.com') {
+          return {
+            _id: '6a59aefc0693afa227a0c0a6',
+            name: 'Demo Business Admin',
+            email: 'business@queueless.com',
+            role: 'Business',
+            businessId: '6a59aefc0693afa227a0c0a6'
+          };
+        }
+        if (cleanEmail === 'admin@queueless.com') {
+          return {
+            _id: '6a59a8441f37801592dcee01',
+            name: 'Super Admin',
+            email: 'admin@queueless.com',
+            role: 'Super Admin'
+          };
+        }
+      }
+      throw err;
+    }
   };
 
   const registerCustomer = async (name, email, password) => {
