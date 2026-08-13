@@ -7,7 +7,7 @@ import ScrollToTop from './utils/ScrollToTop';
 
 function App() {
   return (
-    <BrowserRouter>
+    <BrowserRouter basename={import.meta.env.BASE_URL}>
       <DatabaseProvider>
         <AuthProvider>
           <Toaster position="bottom-right" />
