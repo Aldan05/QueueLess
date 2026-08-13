@@ -1,0 +1,538 @@
+import { useState } from 'react';
+import toast from 'react-hot-toast';
+import { useDatabase } from '../../context/DatabaseContext';
+import { FiFolder, FiSearch, FiFileText, FiImage, FiAward, FiDownload, FiEye, FiPhone, FiMail } from 'react-icons/fi';
+
+const AdminDocuments = () => {
+  const { businesses, adminApproveBusiness, adminRejectBusiness } = useDatabase();
+  const [searchTerm, setSearchTerm] = useState('');
+  const [viewingDoc, setViewingDoc] = useState(null);
+  const [selectedBusiness, setSelectedBusiness] = useState(null);
+
+  // Filter businesses that have some documents or pending documents
+  const businessesWithDocs = businesses.filter(b => 
+    b.docLogo || b.docGovId || b.docRegCert || b.docGst || b.docPhoto || (b.pendingDocs && typeof b.pendingDocs === 'object' && Object.keys(b.pendingDocs).length > 0)
+  ).filter(b => 
+    b.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    b.category?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    b.phone?.includes(searchTerm) ||
+    b.email?.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const getMockImageUrl = (title) => {
+    if (title.includes('Logo')) return 'https://images.unsplash.com/photo-1599305445671-ac291c95aaa9?auto=format&fit=crop&w=800&q=80';
+    if (title.includes('Premises')) return 'https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&w=800&q=80';
+    if (title.includes('ID') || title.includes('Certificate')) return 'https://images.unsplash.com/photo-1589330694653-efa6477326c9?auto=format&fit=crop&w=800&q=80';
+    return 'https://images.unsplash.com/photo-1568227493940-a38b4f494639?auto=format&fit=crop&w=800&q=80';
+  };
+
+  const handleDownload = async (title, fileName, business, docKey) => {
+    try {
+      const toastId = toast.loading('Preparing download...');
+      
+      const liveBiz = businesses.find(b => b._id === business._id) || business;
+      const fileData = docKey ? (liveBiz.pendingDocs?.[docKey] || liveBiz[docKey]) : null;
+      const fileContent = typeof fileData === 'string' ? fileData : (fileData?.content || fileData?.url);
+
+      if (fileContent) {
+        // We have the actual file content as a data URL (base64)
+        const link = document.createElement('a');
+        link.href = fileContent;
+        link.download = (fileData && fileData.name) || fileName || `${title.replace(/\s+/g, '_')}_file`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        toast.success(`Downloaded ${(fileData && fileData.name) || fileName || title}`, { id: toastId });
+        return;
+      }
+      
+      // Fallback: mock download
+      const isImage = fileName.match(/\.(jpg|jpeg|png|gif)$/i);
+      let blob;
+      let downloadName = fileName;
+
+      if (isImage) {
+        // Generate a valid PNG image using Canvas
+        blob = await new Promise((resolve) => {
+          const canvas = document.createElement('canvas');
+          canvas.width = 800;
+          canvas.height = 800;
+          const ctx = canvas.getContext('2d');
+          
+          // Background
+          ctx.fillStyle = '#f8fafc';
+          ctx.fillRect(0, 0, 800, 800);
+          
+          // Border
+          ctx.strokeStyle = '#e2e8f0';
+          ctx.lineWidth = 16;
+          ctx.strokeRect(8, 8, 784, 784);
+
+          // Title
+          ctx.fillStyle = '#1e293b';
+          ctx.font = 'bold 36px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText(title.toUpperCase(), 400, 100);
+          
+          ctx.fillStyle = '#64748b';
+          ctx.font = '20px sans-serif';
+          ctx.fillText('OFFICIAL BUSINESS RECORD', 400, 140);
+
+          // Divider
+          ctx.beginPath();
+          ctx.moveTo(100, 180);
+          ctx.lineTo(700, 180);
+          ctx.strokeStyle = '#cbd5e1';
+          ctx.lineWidth = 2;
+          ctx.stroke();
+
+          // Details
+          ctx.textAlign = 'left';
+          let y = 260;
+          const leftX = 140;
+          
+          const drawDetail = (label, value) => {
+            ctx.font = 'bold 22px sans-serif';
+            ctx.fillStyle = '#64748b';
+            ctx.fillText(label + ':', leftX, y);
+            
+            ctx.font = '22px sans-serif';
+            ctx.fillStyle = '#0f172a';
+            ctx.fillText(value || 'Not provided', leftX + 220, y);
+            y += 55;
+          };
+
+          drawDetail('Business Name', business?.name);
+          drawDetail('Owner Name', business?.ownerName);
+          drawDetail('Category', business?.category);
+          drawDetail('Email', business?.email);
+          drawDetail('Phone', business?.phone);
+          drawDetail('Address', business?.address);
+          drawDetail('Status', business?.verificationStatus || 'Pending');
+
+          // Footer
+          ctx.textAlign = 'center';
+          ctx.font = '16px monospace';
+          ctx.fillStyle = '#94a3b8';
+          ctx.fillText(`File: ${fileName}`, 400, 720);
+          ctx.fillText(`Generated by QueueLess Admin System`, 400, 750);
+
+          canvas.toBlob((b) => resolve(b), 'image/png');
+        });
+        
+        // Ensure it has .png extension if we generated a PNG
+        if (!downloadName.endsWith('.png')) {
+          downloadName = downloadName.replace(/\.[^/.]+$/, "") + ".png";
+        }
+      } else {
+        // Generate a valid Text file for PDFs/Docs so it doesn't show as corrupted
+        const textContent = `========================================
+OFFICIAL BUSINESS RECORD
+========================================
+
+Document: ${title}
+File: ${fileName}
+
+----------------------------------------
+BUSINESS DETAILS
+----------------------------------------
+Business Name : ${business?.name}
+Owner Name    : ${business?.ownerName || 'Not provided'}
+Category      : ${business?.category || 'Not provided'}
+Email         : ${business?.email || 'Not provided'}
+Phone         : ${business?.phone || 'Not provided'}
+Address       : ${business?.address || 'Not provided'}
+Status        : ${business?.verificationStatus || 'Pending'}
+
+========================================
+Generated by QueueLess Admin System
+========================================`;
+        blob = new Blob([textContent], { type: 'text/plain' });
+        
+        // Change extension to .txt so it opens properly instead of corrupting a PDF viewer
+        downloadName = downloadName.replace(/\.[^/.]+$/, "") + "_preview.txt";
+      }
+
+      const blobUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = downloadName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(blobUrl);
+      toast.success(`Downloaded ${downloadName}`, { id: toastId });
+    } catch (error) {
+      console.error('Download failed', error);
+      toast.error('Failed to download document');
+    }
+  };
+
+  return (
+    <div className="space-y-8 pb-10 animate-fadeIn text-gray-900 dark:text-gray-100">
+      
+      {/* Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 bg-white dark:bg-slate-800 p-8 rounded-[2rem] shadow-sm border border-gray-100/80 dark:border-slate-700 relative overflow-hidden">
+        <div className="absolute right-0 bottom-0 w-64 h-64 bg-gray-100 dark:bg-slate-700 rounded-full blur-3xl translate-y-1/2 translate-x-1/4"></div>
+        <div className="relative z-10 flex items-center gap-6">
+          <div className="w-16 h-16 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-2xl flex items-center justify-center shadow-sm">
+            <FiFolder className="w-8 h-8" />
+          </div>
+          <div>
+            <h1 className="text-3xl sm:text-4xl font-extrabold text-gray-900 dark:text-white tracking-tight">
+              Document Verification
+            </h1>
+            <p className="text-gray-500 dark:text-gray-400 font-medium mt-2 text-lg">
+              Review and verify uploaded business compliance documents.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Toolbar */}
+      <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
+        <div className="relative w-full sm:max-w-md">
+          <FiSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
+          <input 
+            type="text" 
+            placeholder="Search businesses by name..." 
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full pl-12 pr-4 py-3 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 focus:border-primary focus:ring-4 focus:ring-primary/10 rounded-xl text-sm font-medium transition-all outline-none text-gray-900 dark:text-gray-100 placeholder-gray-400 shadow-sm"
+          />
+        </div>
+      </div>
+
+      {/* Grid of Documents */}
+      {businessesWithDocs.length === 0 ? (
+        <div className="bg-white dark:bg-slate-800 p-12 rounded-[2rem] shadow-sm border border-gray-100/80 dark:border-slate-700 text-center">
+          <div className="w-20 h-20 bg-gray-50 dark:bg-slate-700 rounded-full flex items-center justify-center mx-auto mb-4">
+            <FiFolder className="w-10 h-10 text-gray-400 dark:text-gray-500" />
+          </div>
+          <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">No documents found</h3>
+          <p className="text-gray-500 dark:text-gray-400 max-w-md mx-auto">
+            {searchTerm ? "Try adjusting your search query." : "No businesses have uploaded documents yet."}
+          </p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+          {businessesWithDocs.map(business => {
+            const logoObj = business.pendingDocs?.docLogo || business.docLogo;
+            const logoSrc = typeof logoObj === 'string' ? logoObj : (logoObj?.content || logoObj?.url);
+
+            return (
+              <div key={business._id} className="bg-white dark:bg-slate-800 p-6 rounded-[2rem] shadow-sm border border-gray-100/80 dark:border-slate-700 hover:shadow-md transition-shadow flex flex-col">
+                <div className="flex justify-between items-start mb-6">
+                  <div className="flex items-start gap-3">
+                    {logoSrc ? (
+                      <img src={logoSrc} alt={business.name} className="w-12 h-12 rounded-xl object-cover border border-gray-100 dark:border-slate-700 shadow-sm shrink-0" />
+                    ) : (
+                      <div className="w-12 h-12 rounded-xl bg-blue-50 dark:bg-slate-700 text-blue-600 dark:text-blue-400 font-black flex items-center justify-center text-xl shrink-0">
+                        {business.name?.charAt(0) || '🏢'}
+                      </div>
+                    )}
+                    <div>
+                      <h2 className="text-xl font-bold text-gray-900 dark:text-white leading-tight">{business.name}</h2>
+                      <div className="text-sm text-gray-500 dark:text-gray-400 mt-1 space-y-1">
+                        <p>ID: {business._id.substring(0, 8)}</p>
+                        {business.phone && <p className="flex items-center gap-1"><FiPhone className="w-3.5 h-3.5"/> {business.phone}</p>}
+                        {business.email && <p className="flex items-center gap-1"><FiMail className="w-3.5 h-3.5"/> {business.email}</p>}
+                      </div>
+                    </div>
+                  </div>
+                  <span className={`px-3 py-1 text-xs font-black uppercase tracking-wider rounded-lg shrink-0 ${
+                    business.verificationStatus === 'Approved' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
+                    business.verificationStatus === 'Rejected' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' :
+                    'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400'
+                  }`}>
+                    {business.verificationStatus}
+                  </span>
+                </div>
+
+                <div className="flex-1 space-y-3">
+                  <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Uploaded Files</p>
+                  
+                  {(business.docLogo || business.pendingDocs?.docLogo) && (
+                    <DocRow 
+                      icon={FiImage} 
+                      title="Business Logo" 
+                      file={business.pendingDocs?.docLogo || business.docLogo} 
+                      isPending={!!business.pendingDocs?.docLogo} 
+                      onView={(title, name) => setViewingDoc({ title, name, businessName: business.name, business, docKey: 'docLogo', isPending: !!business.pendingDocs?.docLogo })} 
+                      onDownload={(title, name) => handleDownload(title, name, business, 'docLogo')} 
+                    />
+                  )}
+                  {(business.docGovId || business.pendingDocs?.docGovId) && (
+                    <DocRow 
+                      icon={FiFileText} 
+                      title="Government ID" 
+                      file={business.pendingDocs?.docGovId || business.docGovId} 
+                      isPending={!!business.pendingDocs?.docGovId} 
+                      onView={(title, name) => setViewingDoc({ title, name, businessName: business.name, business, docKey: 'docGovId', isPending: !!business.pendingDocs?.docGovId })} 
+                      onDownload={(title, name) => handleDownload(title, name, business, 'docGovId')} 
+                    />
+                  )}
+                  {(business.docRegCert || business.pendingDocs?.docRegCert) && (
+                    <DocRow 
+                      icon={FiAward} 
+                      title="Registration Certificate" 
+                      file={business.pendingDocs?.docRegCert || business.docRegCert} 
+                      isPending={!!business.pendingDocs?.docRegCert} 
+                      onView={(title, name) => setViewingDoc({ title, name, businessName: business.name, business, docKey: 'docRegCert', isPending: !!business.pendingDocs?.docRegCert })} 
+                      onDownload={(title, name) => handleDownload(title, name, business, 'docRegCert')} 
+                    />
+                  )}
+                  {(business.docGst || business.pendingDocs?.docGst) && (
+                    <DocRow 
+                      icon={FiFileText} 
+                      title="GST / Tax Details" 
+                      file={business.pendingDocs?.docGst || business.docGst} 
+                      isPending={!!business.pendingDocs?.docGst} 
+                      onView={(title, name) => setViewingDoc({ title, name, businessName: business.name, business, docKey: 'docGst', isPending: !!business.pendingDocs?.docGst })} 
+                      onDownload={(title, name) => handleDownload(title, name, business, 'docGst')} 
+                    />
+                  )}
+                  {(business.docPhoto || business.pendingDocs?.docPhoto) && (
+                    <DocRow 
+                      icon={FiImage} 
+                      title="Premises Photo" 
+                      file={business.pendingDocs?.docPhoto || business.docPhoto} 
+                      isPending={!!business.pendingDocs?.docPhoto} 
+                      onView={(title, name) => setViewingDoc({ title, name, businessName: business.name, business, docKey: 'docPhoto', isPending: !!business.pendingDocs?.docPhoto })} 
+                      onDownload={(title, name) => handleDownload(title, name, business, 'docPhoto')} 
+                    />
+                  )}
+                </div>
+
+                <div className="mt-6 pt-4 border-t border-gray-100 dark:border-slate-700 flex justify-end gap-3">
+                  <button onClick={() => setSelectedBusiness(business)} className="px-4 py-2 text-sm font-bold text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white bg-gray-50 dark:bg-slate-700 hover:bg-gray-100 dark:hover:bg-slate-600 rounded-xl transition-colors">
+                    Review Complete Profile
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Document Viewer Modal */}
+      {viewingDoc && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-3xl overflow-hidden border border-gray-200 dark:border-slate-700 flex flex-col max-h-[90vh]">
+            
+            <div className="flex justify-between items-center p-4 border-b border-gray-100 dark:border-slate-700 bg-gray-50/50 dark:bg-slate-800/50">
+              <div>
+                <h3 className="font-bold text-gray-900 dark:text-white">{viewingDoc.title}</h3>
+                <p className="text-xs text-gray-500 dark:text-gray-400">{viewingDoc.businessName}</p>
+              </div>
+              <button onClick={() => setViewingDoc(null)} className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 bg-gray-100 dark:bg-slate-700 rounded-lg transition-colors">
+                Close
+              </button>
+            </div>
+            
+            <div className="p-8 flex flex-col items-center justify-center min-h-[400px] overflow-y-auto bg-gray-100/50 dark:bg-slate-900/50 relative">
+              {(() => {
+                const liveBiz = businesses.find(b => b._id === viewingDoc.business._id) || viewingDoc.business;
+                const docObj = viewingDoc.docKey 
+                  ? (liveBiz.pendingDocs?.[viewingDoc.docKey] || liveBiz[viewingDoc.docKey])
+                  : (viewingDoc.business.pendingDocs?.[viewingDoc.docKey] || viewingDoc.business[viewingDoc.docKey]);
+                
+                const fileSrc = typeof docObj === 'string' 
+                  ? docObj 
+                  : (docObj?.content || docObj?.url || docObj?.data);
+
+                const isPendingDoc = !!liveBiz.pendingDocs?.[viewingDoc.docKey];
+                const isPdf = viewingDoc.name?.match(/\.(pdf)$/i) || docObj?.type?.includes('pdf') || (fileSrc && fileSrc.startsWith('data:application/pdf'));
+
+                if (fileSrc) {
+                  return isPdf ? (
+                    <div className="relative w-full h-full min-h-[500px] flex flex-col items-center justify-center bg-white dark:bg-slate-800 shadow-sm border border-gray-200 dark:border-slate-700 rounded-lg p-2">
+                      <iframe src={fileSrc} className="w-full h-[500px] rounded-lg" title={viewingDoc.name} />
+                      {isPendingDoc && (
+                        <div className="mt-2 px-3 py-1 bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-300 font-bold text-xs rounded-full border border-orange-200 dark:border-orange-800">
+                          ✨ Newly Uploaded PDF Awaiting Admin Approval
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="relative w-full h-full min-h-[300px] flex flex-col items-center justify-center">
+                      <img src={fileSrc} alt={viewingDoc.title} className="max-w-full max-h-[460px] rounded-2xl shadow-xl object-contain border border-gray-200 dark:border-slate-700" />
+                      {isPendingDoc && (
+                        <div className="mt-3 px-3 py-1 bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-300 font-bold text-xs rounded-full border border-orange-200 dark:border-orange-800 animate-pulse">
+                          ✨ Real Uploaded Image Awaiting Admin Approval
+                        </div>
+                      )}
+                    </div>
+                  );
+                }
+                
+                const isPdfFallback = viewingDoc.name?.match(/\.(pdf|doc|docx)$/i) || viewingDoc.title?.includes('Certificate') || viewingDoc.title?.includes('GST');
+                const isImgFallback = viewingDoc.name?.match(/\.(jpg|jpeg|png|gif)$/i) || viewingDoc.title?.includes('Logo') || viewingDoc.title?.includes('Photo') || viewingDoc.title?.includes('ID');
+
+                return isPdfFallback ? (
+                <div className="relative w-full h-full min-h-[300px] flex items-center justify-center bg-white dark:bg-slate-800 shadow-sm border border-gray-200 dark:border-slate-700 rounded-lg p-8">
+                  <div className="w-full space-y-4">
+                    <div className="w-3/4 h-6 bg-gray-200 dark:bg-slate-700 rounded animate-pulse"></div>
+                    <div className="w-full h-4 bg-gray-200 dark:bg-slate-700 rounded animate-pulse"></div>
+                    <div className="w-full h-4 bg-gray-200 dark:bg-slate-700 rounded animate-pulse"></div>
+                    <div className="w-5/6 h-4 bg-gray-200 dark:bg-slate-700 rounded animate-pulse"></div>
+                    <div className="w-full h-4 bg-gray-200 dark:bg-slate-700 rounded animate-pulse mt-8"></div>
+                    <div className="w-4/5 h-4 bg-gray-200 dark:bg-slate-700 rounded animate-pulse"></div>
+                  </div>
+                  <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/50 dark:bg-slate-900/50 opacity-0 hover:opacity-100 transition-opacity rounded-lg backdrop-blur-sm">
+                    <p className="text-gray-900 dark:text-white font-bold bg-white/90 dark:bg-slate-800/90 px-4 py-2 rounded-lg shadow-lg">Mock PDF Preview for {viewingDoc.title}</p>
+                  </div>
+                </div>
+              ) : isImgFallback ? (
+                <div className="relative w-full h-full min-h-[300px] flex items-center justify-center">
+                  <img src={getMockImageUrl(viewingDoc.title)} alt={viewingDoc.title} className="max-w-full max-h-[400px] rounded-lg shadow-lg object-contain" />
+                  <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/40 opacity-0 hover:opacity-100 transition-opacity rounded-lg backdrop-blur-[2px]">
+                    <p className="text-white font-bold bg-black/60 px-4 py-2 rounded-lg shadow-lg">Mock Image Preview for {viewingDoc.title}</p>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="w-24 h-24 bg-white dark:bg-slate-800 rounded-2xl flex items-center justify-center shadow-sm border border-gray-200 dark:border-slate-700 mb-6">
+                    <FiFileText className="w-10 h-10 text-blue-500" />
+                  </div>
+                  <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-2">{viewingDoc.name}</h4>
+                  <p className="text-sm text-gray-500 dark:text-gray-400 max-w-md text-center">
+                    This is a secure preview of the uploaded document.
+                  </p>
+                </>
+              );
+            })()}
+            </div>
+            
+            <div className="p-4 border-t border-gray-100 dark:border-slate-700 bg-gray-50/50 dark:bg-slate-800/50 flex flex-wrap justify-end gap-3">
+              {(viewingDoc.business.verificationStatus === 'Pending Review' || viewingDoc.business.verificationStatus === 'Pending Update Review' || viewingDoc.isPending) && (
+                <>
+                  <button 
+                    onClick={() => { adminRejectBusiness(viewingDoc.business._id); setViewingDoc(null); toast.error('Business Rejected'); }}
+                    className="px-6 py-2.5 text-red-600 bg-red-50 hover:bg-red-100 dark:text-red-400 dark:bg-red-900/30 dark:hover:bg-red-900/50 font-bold rounded-xl transition-colors"
+                  >
+                    Reject Update
+                  </button>
+                  <button 
+                    onClick={() => { adminApproveBusiness(viewingDoc.business._id); setViewingDoc(null); toast.success('Business Approved'); }}
+                    className="px-6 py-2.5 bg-green-600 text-white font-bold rounded-xl hover:bg-green-700 transition-colors shadow-sm"
+                  >
+                    Approve Update
+                  </button>
+                </>
+              )}
+              <button className="px-6 py-2.5 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition-colors shadow-sm" onClick={() => {
+                handleDownload(viewingDoc.title, viewingDoc.name, viewingDoc.business, viewingDoc.docKey);
+              }}>
+                Download File
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Complete Profile Modal */}
+      {selectedBusiness && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden border border-gray-200 dark:border-slate-700 flex flex-col max-h-[90vh]">
+            <div className="flex justify-between items-center p-6 border-b border-gray-100 dark:border-slate-700 bg-gray-50/50 dark:bg-slate-800/50">
+              <div>
+                <h3 className="text-2xl font-bold text-gray-900 dark:text-white">{selectedBusiness.name}</h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400">{selectedBusiness.category} • ID: {selectedBusiness._id}</p>
+              </div>
+              <button onClick={() => setSelectedBusiness(null)} className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 bg-gray-100 dark:bg-slate-700 rounded-lg transition-colors">
+                Close
+              </button>
+            </div>
+            
+            <div className="p-6 overflow-y-auto space-y-6">
+              <div className="grid grid-cols-2 gap-6">
+                <div className="space-y-1">
+                  <p className="text-sm font-bold text-gray-500 dark:text-gray-400">Owner Name</p>
+                  <p className="text-gray-900 dark:text-white font-medium">{selectedBusiness.ownerName || 'Not provided'}</p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-sm font-bold text-gray-500 dark:text-gray-400">Email Address</p>
+                  <p className="text-gray-900 dark:text-white font-medium">{selectedBusiness.email || selectedBusiness.ownerEmail || 'Not provided'}</p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-sm font-bold text-gray-500 dark:text-gray-400">Phone Number</p>
+                  <p className="text-gray-900 dark:text-white font-medium">{selectedBusiness.phone || selectedBusiness.ownerMobile || 'Not provided'}</p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-sm font-bold text-gray-500 dark:text-gray-400">Business Address</p>
+                  <p className="text-gray-900 dark:text-white font-medium">{selectedBusiness.address || 'Not provided'}</p>
+                </div>
+                <div className="space-y-1 col-span-2">
+                  <p className="text-sm font-bold text-gray-500 dark:text-gray-400">Verification Status</p>
+                  <span className={`inline-block px-3 py-1 mt-1 rounded-md text-xs font-black uppercase tracking-wider ${
+                    selectedBusiness.verificationStatus === 'Approved' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
+                    selectedBusiness.verificationStatus === 'Rejected' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' :
+                    'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400'
+                  }`}>
+                    {selectedBusiness.verificationStatus || 'Pending Review'}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-6 border-t border-gray-100 dark:border-slate-700 bg-gray-50/50 dark:bg-slate-800/50 flex justify-end gap-3">
+              <button 
+                onClick={() => { adminRejectBusiness(selectedBusiness._id); setSelectedBusiness(null); toast.error('Business Rejected'); }}
+                className="px-6 py-2.5 bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400 font-bold rounded-xl hover:bg-red-200 dark:hover:bg-red-900/50 transition-colors"
+              >
+                Reject
+              </button>
+              <button 
+                onClick={() => { adminApproveBusiness(selectedBusiness._id); setSelectedBusiness(null); toast.success('Business Approved'); }}
+                className="px-6 py-2.5 bg-green-600 text-white font-bold rounded-xl hover:bg-green-700 transition-colors shadow-sm"
+              >
+                Approve Verified Business
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const DocRow = ({ icon: Icon, title, file, isPending, onView, onDownload }) => {
+  const fileName = file.fileName || file.name || (typeof file === 'string' ? file.split('/').pop() : 'Document File');
+  
+  return (
+    <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-slate-900/50 rounded-xl border border-gray-100 dark:border-slate-700/50 group hover:border-gray-200 dark:hover:border-slate-600 transition-colors">
+      <div className="flex items-center gap-3 overflow-hidden">
+        <div className="w-8 h-8 bg-blue-100/50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 rounded-lg flex items-center justify-center shrink-0">
+          <Icon className="w-4 h-4" />
+        </div>
+        <div className="overflow-hidden flex items-center gap-2">
+          <p className="text-sm font-bold text-gray-900 dark:text-gray-100 truncate">{title}</p>
+          {isPending && (
+            <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400 border border-orange-200 dark:border-orange-800 shrink-0">
+              New Update
+            </span>
+          )}
+        </div>
+      </div>
+      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        <button 
+          onClick={() => onView(title, fileName)}
+          className="p-1.5 text-gray-500 hover:text-blue-600 hover:bg-blue-50 dark:text-gray-400 dark:hover:text-blue-400 dark:hover:bg-slate-800 rounded-lg transition-colors"
+          title="Preview Document"
+        >
+          <FiEye className="w-4 h-4" />
+        </button>
+        <button 
+          onClick={() => onDownload(title, fileName)}
+          className="p-1.5 text-gray-500 hover:text-blue-600 hover:bg-blue-50 dark:text-gray-400 dark:hover:text-blue-400 dark:hover:bg-slate-800 rounded-lg transition-colors"
+          title="Download Document"
+        >
+          <FiDownload className="w-4 h-4" />
+        </button>
+      </div>
+    </div>
+  );
+};
+
+export default AdminDocuments;
