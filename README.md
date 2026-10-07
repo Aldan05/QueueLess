@@ -11,6 +11,22 @@
 
 ---
 
+## 🌐 Live Hosted Demo
+
+**Live URL:** [https://aldan05.github.io/QueueLess/](https://aldan05.github.io/QueueLess/)
+
+### 🔑 Instant Demo Accounts
+All portals can be accessed directly on the live site with 1-click **"Fill Demo Credentials"** or using the credentials below:
+
+| Role | Portal Login | Email / Employee ID | Password | Experience / UI |
+|---|---|---|---|---|
+| **Customer** | [`/login`](https://aldan05.github.io/QueueLess/login) | `customer@queueless.com` | `password123` | Search businesses, join live queue, view live token `A-005`, appointments, history |
+| **Business Admin** | [`/login`](https://aldan05.github.io/QueueLess/login) | `business@queueless.com` | `password123` | Real-time queue manager, call next, open/pause queue, counters, staff, appointments |
+| **Super Admin** | [`/login`](https://aldan05.github.io/QueueLess/login) | `admin@queueless.com` | `password123` | System analytics, approve/reject pending business verifications, complaints, announcements |
+| **Staff** | [`/staff/login`](https://aldan05.github.io/QueueLess/staff/login) | `EMP001` | `password123` | Counter 1 console, serve live tokens, call next, suggest time slot, start break |
+
+---
+
 ## 🚀 Overview
 
 **QueueLess** is a full-stack real-time queue and appointment management platform designed to eliminate unnecessary waiting and improve customer service.

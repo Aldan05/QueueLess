@@ -9,6 +9,7 @@ import toast from 'react-hot-toast';
 import { io } from 'socket.io-client';
 import { motion, AnimatePresence } from 'framer-motion';
 import QRScanner from './QRScanner';
+import { DEMO_BUSINESSES, DEMO_ACTIVE_TOKENS, DEMO_SERVING_CUSTOMER } from '../../utils/demoData';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 const SOCKET_URL = import.meta.env.VITE_API_URL ? import.meta.env.VITE_API_URL.replace('/api', '') : 'http://localhost:5000';
@@ -425,13 +426,17 @@ const StaffDashboard = () => {
   const fetchBusiness = async () => {
     try {
       const response = await fetch(`${API_URL}/businesses`);
-      const allBusinesses = await response.json();
-      const myBusiness = allBusinesses.find(b => b._id === currentStaff.businessId);
-      setBusinessData(myBusiness);
-      fetchActiveQueue(myBusiness);
-    } catch (error) {
-      console.error(error);
-    }
+      if (response.ok) {
+        const allBusinesses = await response.json();
+        const myBusiness = allBusinesses.find(b => b._id === currentStaff.businessId) || allBusinesses[0];
+        setBusinessData(myBusiness);
+        fetchActiveQueue(myBusiness);
+        return;
+      }
+    } catch (error) {}
+    const demoBiz = DEMO_BUSINESSES[0];
+    setBusinessData(demoBiz);
+    fetchActiveQueue(demoBiz);
   };
 
   const fetchActiveQueue = async (bizData) => {
@@ -448,10 +453,11 @@ const StaffDashboard = () => {
         } else {
           setServingCustomerData(null);
         }
+        return;
       }
-    } catch (error) {
-      console.error(error);
-    }
+    } catch (error) {}
+    setActiveTokens(DEMO_ACTIVE_TOKENS);
+    setServingCustomerData(DEMO_SERVING_CUSTOMER);
   };
 
   const fetchAnalytics = async () => {
@@ -467,10 +473,16 @@ const StaffDashboard = () => {
           breakTimeUsed: data.breakTimeUsed,
           workingHours: data.workingHours
         });
+        return;
       }
-    } catch (error) {
-      console.error(error);
-    }
+    } catch (error) {}
+    setStats({
+      completed: 18,
+      missed: 1,
+      avgServiceTime: 8,
+      breakTimeUsed: 15,
+      workingHours: '5h 30m'
+    });
   };
 
   const callNext = async (target = null) => {
@@ -496,11 +508,19 @@ const StaffDashboard = () => {
         toast.success(label);
         fetchBusiness();
         fetchAnalytics();
-      } else {
-        const data = await response.json();
-        toast.error(data.message || 'Failed to call next');
+        return;
       }
-    } catch (error) { toast.error('Server error'); }
+    } catch (error) {}
+    // Offline / demo fallback:
+    if (activeTokens.length > 0) {
+      const nextTok = activeTokens[0];
+      setServingCustomerData({ ...nextTok, status: 'serving', startTime: new Date().toISOString() });
+      setActiveTokens(prev => prev.slice(1));
+      setBusinessData(prev => ({ ...(prev || DEMO_BUSINESSES[0]), currentToken: nextTok.token }));
+      toast.success(`Called token ${nextTok.token}`);
+    } else {
+      toast.error('No customers waiting in queue');
+    }
   };
 
   const handleSuggestTime = async (queueId, { suggestedTime, note }) => {
@@ -514,49 +534,54 @@ const StaffDashboard = () => {
         toast.success(`Suggested slot ${suggestedTime} sent!`);
         fetchActiveQueue();
         fetchBusiness();
-      } else {
-        const err = await res.json();
-        toast.error(err.message || 'Failed to suggest time');
+        return;
       }
-    } catch (e) {
-      toast.error('Server error');
-    }
+    } catch (e) {}
+    toast.success(`Suggested slot ${suggestedTime} sent! (Demo)`);
   };
 
   const handleComplete = async () => {
-    if (!businessData?.currentToken || businessData.currentToken === '-') return toast.error('No customer currently being served');
+    const curTok = businessData?.currentToken;
+    if (!curTok || curTok === '-') return toast.error('No customer currently being served');
     try {
       const response = await fetch(`${API_URL}/businesses/${currentStaff.businessId}/queue/complete`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: businessData.currentToken, staffId: currentStaff._id })
+        body: JSON.stringify({ token: curTok, staffId: currentStaff._id })
       });
       if (response.ok) {
-        toast.success(`Completed token ${businessData.currentToken}`);
+        toast.success(`Completed token ${curTok}`);
         fetchBusiness();
         fetchAnalytics();
-      } else {
-        toast.error('Failed to complete token');
+        return;
       }
-    } catch (error) { toast.error('Server error'); }
+    } catch (error) {}
+    setServingCustomerData(null);
+    setBusinessData(prev => ({ ...(prev || DEMO_BUSINESSES[0]), currentToken: '-' }));
+    setStats(prev => ({ ...prev, completed: prev.completed + 1 }));
+    toast.success(`Completed token ${curTok}`);
   };
 
   const handleSkip = async () => {
-    if (!businessData?.currentToken || businessData.currentToken === '-') return toast.error('No customer currently being served');
+    const curTok = businessData?.currentToken;
+    if (!curTok || curTok === '-') return toast.error('No customer currently being served');
     try {
       const response = await fetch(`${API_URL}/businesses/${currentStaff.businessId}/queue/skip`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: businessData.currentToken, staffId: currentStaff._id })
+        body: JSON.stringify({ token: curTok, staffId: currentStaff._id })
       });
       if (response.ok) {
-        toast.success(`Skipped token ${businessData.currentToken}`);
+        toast.success(`Skipped token ${curTok}`);
         fetchBusiness();
         fetchAnalytics();
-      } else {
-        toast.error('Failed to skip token');
+        return;
       }
-    } catch (error) { toast.error('Server error'); }
+    } catch (error) {}
+    setServingCustomerData(null);
+    setBusinessData(prev => ({ ...(prev || DEMO_BUSINESSES[0]), currentToken: '-' }));
+    setStats(prev => ({ ...prev, missed: prev.missed + 1 }));
+    toast.success(`Skipped token ${curTok}`);
   };
 
   const handleRecall = async () => {

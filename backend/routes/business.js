@@ -113,6 +113,53 @@ router.get('/', async (req, res) => {
   }
 });
 
+// @route   GET /api/businesses/:id
+// @desc    Get a single business by ID
+router.get('/:id', async (req, res) => {
+  try {
+    const b = await Business.findById(req.params.id);
+    if (!b) return res.status(404).json({ message: 'Business not found' });
+
+    const bObj = b.toObject();
+    const bIdList = [b._id];
+
+    const waitingCount = await Queue.countDocuments({
+      businessId: { $in: bIdList },
+      status: { $in: ['waiting', 'suggested_time'] }
+    });
+
+    const completedCount = await Queue.countDocuments({
+      businessId: { $in: bIdList },
+      status: 'completed',
+      completeTime: {
+        $gte: new Date(new Date().setHours(0, 0, 0, 0)),
+        $lte: new Date(new Date().setHours(23, 59, 59, 999))
+      }
+    });
+
+    const currentServing = await Queue.findOne({
+      businessId: { $in: bIdList },
+      status: 'serving'
+    });
+
+    const activeServingToken = currentServing ? currentServing.token : (b.currentToken || '-');
+    const avgServiceMin = Math.max(1, Math.min(60, Number(b.avgServiceTime) || 5));
+    const calcWaitTime = waitingCount > 0 ? (waitingCount * avgServiceMin) : 0;
+    const cleanRating = Math.min(5, Math.max(0, Number(b.rating) || 0));
+
+    bObj.rating = cleanRating;
+    bObj.waiting = waitingCount;
+    bObj.completedToday = completedCount;
+    bObj.currentToken = activeServingToken;
+    bObj.waitTime = calcWaitTime;
+
+    res.json(bObj);
+  } catch (error) {
+    console.error('Fetch single business error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
 // @route   PATCH /api/businesses/:id/verify
 // @desc    Update business verification status (Admin only in real app)
 router.patch('/:id/verify', async (req, res) => {

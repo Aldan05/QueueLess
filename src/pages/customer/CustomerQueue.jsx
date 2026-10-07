@@ -1,4 +1,5 @@
 import { FiList, FiClock, FiSearch } from 'react-icons/fi';
+import { Link } from 'react-router-dom';
 import ActiveQueueWidget from '../../components/customer/ActiveQueueWidget';
 import { useDatabase } from '../../context/DatabaseContext';
 
@@ -46,12 +47,12 @@ const CustomerQueue = () => {
         
         {(!activeCustomerQueue || ['completed', 'cancelled', 'rejected'].includes(activeCustomerQueue.status)) ? (
           <div className="mt-6 text-center">
-             <a 
-                href="/customer/find"
+             <Link 
+                to="/customer/find"
                 className="inline-flex items-center justify-center gap-2 px-8 py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition-all shadow-[0_4px_14px_0_rgba(59,130,246,0.39)] hover:shadow-[0_6px_20px_rgba(59,130,246,0.23)] hover:-translate-y-0.5"
              >
                 <FiSearch className="w-5 h-5" /> Find Businesses to Join
-             </a>
+             </Link>
           </div>
         ) : null}
       </div>

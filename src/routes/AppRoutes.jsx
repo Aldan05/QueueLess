@@ -56,6 +56,7 @@ import Terms from '../pages/public/Terms';
 import Help from '../pages/public/Help';
 import FAQ from '../pages/public/FAQ';
 import Blog from '../pages/public/Blog';
+import Home from '../pages/public/Home';
 
 // Admin imports
 import AdminDashboard from '../pages/admin/AdminDashboard';
@@ -88,7 +89,7 @@ const AppRoutes = () => {
     <Routes>
       {/* Public Routes */}
       <Route element={<PublicLayout />}>
-        <Route path="/" element={<PlaceholderPage title="Home Page" />} />
+        <Route path="/" element={<Home />} />
         <Route path="/features" element={<Features />} />
         <Route path="/pricing" element={<Pricing />} />
         <Route path="/business" element={<Business />} />

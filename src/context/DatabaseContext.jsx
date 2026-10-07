@@ -1,6 +1,16 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import toast from 'react-hot-toast';
 import { io } from 'socket.io-client';
+import {
+  DEMO_BUSINESSES,
+  DEMO_USERS,
+  DEMO_ANNOUNCEMENTS,
+  DEMO_COMPLAINTS,
+  DEMO_ACTIVE_CUSTOMER_QUEUE,
+  DEMO_CUSTOMER_ID,
+  DEMO_BUSINESS_ID,
+  DEMO_ADMIN_ID
+} from '../utils/demoData';
 
 const DatabaseContext = createContext();
 
@@ -9,11 +19,58 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 const SOCKET_URL = import.meta.env.VITE_API_URL ? import.meta.env.VITE_API_URL.replace('/api', '') : 'http://localhost:5000';
 
 export const DatabaseProvider = ({ children }) => {
-  const [businesses, setBusinesses] = useState([]);
-  const [users, setUsers] = useState([]);
-  const [announcements, setAnnouncements] = useState([]);
-  const [complaints, setComplaints] = useState([]);
-  const [activeCustomerQueue, setActiveCustomerQueue] = useState(null);
+  const [businesses, setBusinesses] = useState(() => {
+    try {
+      const saved = localStorage.getItem('ql_businesses');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return DEMO_BUSINESSES;
+  });
+
+  const [users, setUsers] = useState(() => {
+    try {
+      const saved = localStorage.getItem('ql_users');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return DEMO_USERS;
+  });
+
+  const [announcements, setAnnouncements] = useState(() => {
+    try {
+      const saved = localStorage.getItem('ql_announcements');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {}
+    return DEMO_ANNOUNCEMENTS;
+  });
+
+  const [complaints, setComplaints] = useState(() => {
+    try {
+      const saved = localStorage.getItem('ql_complaints');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {}
+    return DEMO_COMPLAINTS;
+  });
+
+  const [activeCustomerQueue, setActiveCustomerQueue] = useState(() => {
+    try {
+      const saved = localStorage.getItem('ql_customer_queue');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return null;
+  });
+
   const [socket, setSocket] = useState(null);
   const [liveNotifications, setLiveNotifications] = useState([]);
 
@@ -153,10 +210,14 @@ export const DatabaseProvider = ({ children }) => {
       const response = await fetch(`${API_URL}/businesses`);
       if (response.ok) {
         const data = await response.json();
-        setBusinesses(data);
+        if (Array.isArray(data) && data.length > 0) {
+          setBusinesses(data);
+          try { localStorage.setItem('ql_businesses', JSON.stringify(data)); } catch {}
+          return data;
+        }
       }
     } catch (error) {
-      console.error('Error fetching businesses:', error);
+      // Offline fallback: keep cached or DEMO_BUSINESSES
     }
   };
 
@@ -165,10 +226,14 @@ export const DatabaseProvider = ({ children }) => {
       const response = await fetch(`${API_URL}/auth/users`);
       if (response.ok) {
         const data = await response.json();
-        setUsers(data);
+        if (Array.isArray(data) && data.length > 0) {
+          setUsers(data);
+          try { localStorage.setItem('ql_users', JSON.stringify(data)); } catch {}
+          return data;
+        }
       }
     } catch (error) {
-      console.error('Error fetching users:', error);
+      // Offline fallback: keep cached or DEMO_USERS
     }
   };
 
@@ -177,10 +242,14 @@ export const DatabaseProvider = ({ children }) => {
       const response = await fetch(`${API_URL}/announcements`);
       if (response.ok) {
         const data = await response.json();
-        setAnnouncements(data);
+        if (Array.isArray(data)) {
+          setAnnouncements(data);
+          try { localStorage.setItem('ql_announcements', JSON.stringify(data)); } catch {}
+          return data;
+        }
       }
     } catch (error) {
-      console.error('Error fetching announcements:', error);
+      // Offline fallback
     }
   };
 
@@ -189,10 +258,14 @@ export const DatabaseProvider = ({ children }) => {
       const response = await fetch(`${API_URL}/complaints`);
       if (response.ok) {
         const data = await response.json();
-        setComplaints(data);
+        if (Array.isArray(data)) {
+          setComplaints(data);
+          try { localStorage.setItem('ql_complaints', JSON.stringify(data)); } catch {}
+          return data;
+        }
       }
     } catch (error) {
-      console.error('Error fetching complaints:', error);
+      // Offline fallback
     }
   };
 
@@ -202,9 +275,10 @@ export const DatabaseProvider = ({ children }) => {
       if (response.ok) {
         const data = await response.json();
         setComplaints(data);
+        return data;
       }
     } catch (error) {
-      console.error('Error fetching my complaints:', error);
+      // Offline fallback: filter complaints by user or demo
     }
   };
 
@@ -219,13 +293,32 @@ export const DatabaseProvider = ({ children }) => {
       if (res.ok) {
         const data = await res.json();
         setActiveCustomerQueue(data);
+        try { localStorage.setItem('ql_customer_queue', JSON.stringify(data)); } catch {}
         return data;
       } else {
         setActiveCustomerQueue(null);
+        try { localStorage.removeItem('ql_customer_queue'); } catch {}
         return null;
       }
     } catch (err) {
-      // silently handle
+      // Offline fallback: check localStorage or demo queue for demo customer
+      try {
+        const saved = localStorage.getItem('ql_customer_queue');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          setActiveCustomerQueue(parsed);
+          return parsed;
+        }
+      } catch {}
+      const currentUserStr = localStorage.getItem('currentUser');
+      if (currentUserStr) {
+        const u = JSON.parse(currentUserStr);
+        if (u.email === 'customer@queueless.com') {
+          setActiveCustomerQueue(DEMO_ACTIVE_CUSTOMER_QUEUE);
+          try { localStorage.setItem('ql_customer_queue', JSON.stringify(DEMO_ACTIVE_CUSTOMER_QUEUE)); } catch {}
+          return DEMO_ACTIVE_CUSTOMER_QUEUE;
+        }
+      }
       return null;
     }
   };
@@ -647,22 +740,43 @@ export const DatabaseProvider = ({ children }) => {
       });
       if (response.ok) {
         const data = await response.json();
-        setActiveCustomerQueue(data);
+        const qObj = data.queue || data;
+        setActiveCustomerQueue(qObj);
+        try { localStorage.setItem('ql_customer_queue', JSON.stringify(qObj)); } catch {}
         
         // Join the business room to get live updates for this queue
         if (socket) {
           socket.emit('joinBusinessRoom', businessId);
         }
 
-        toast.success(`Successfully joined queue! Your token is ${data.token}. We'll notify you when it's your turn.`);
+        toast.success(`Successfully joined queue! Your token is ${qObj.token}. We'll notify you when it's your turn.`);
         return data;
       } else {
         const err = await response.json();
         toast.error(err.message || 'Failed to join queue.');
       }
     } catch (error) {
-      console.error(error);
-      toast.error('An error occurred while joining the queue.');
+      // Offline fallback: generate mock queue token
+      const biz = businesses.find(b => b._id === businessId || b.id === businessId) || DEMO_BUSINESSES[0];
+      const nextTokenNum = (Number(biz.waiting) || 3) + 1;
+      const prefix = biz.name?.charAt(0).toUpperCase() || 'A';
+      const mockQueue = {
+        _id: `q_${Date.now()}`,
+        queueId: `q_${Date.now()}`,
+        token: `${prefix}-00${nextTokenNum}`,
+        status: 'waiting',
+        position: nextTokenNum,
+        estimatedWait: nextTokenNum * 5,
+        serviceName: purpose || 'General Consultation',
+        counter: 'Counter 1',
+        bookedTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        joinTime: new Date().toISOString(),
+        businessId: biz
+      };
+      setActiveCustomerQueue(mockQueue);
+      try { localStorage.setItem('ql_customer_queue', JSON.stringify(mockQueue)); } catch {}
+      toast.success(`Joined queue successfully! Your token is ${mockQueue.token}.`);
+      return { queue: mockQueue };
     }
   };
   
@@ -672,24 +786,22 @@ export const DatabaseProvider = ({ children }) => {
         const userStr = localStorage.getItem('currentUser');
         const userId = userStr ? JSON.parse(userStr)._id : null;
         const queueId = activeCustomerQueue.queueId || activeCustomerQueue._id;
-        const isRejected = activeCustomerQueue.status === 'rejected';
 
         await fetch(`${API_URL}/customer/queue/leave`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ businessId: activeCustomerQueue.businessId, userId, queueId })
+          body: JSON.stringify({ businessId: activeCustomerQueue.businessId?._id || activeCustomerQueue.businessId, userId, queueId })
         });
         
         if (socket) {
-          socket.emit('leaveBusinessRoom', activeCustomerQueue.businessId);
+          socket.emit('leaveBusinessRoom', activeCustomerQueue.businessId?._id || activeCustomerQueue.businessId);
         }
-        
-        setActiveCustomerQueue(null);
-        toast.success(isRejected ? 'Rejection dismissed. Find another business.' : 'Left the queue.');
-      } catch (error) {
-        console.error(error);
-        toast.error('Failed to leave queue.');
-      }
+      } catch (error) {}
+
+      const isRejected = activeCustomerQueue.status === 'rejected';
+      setActiveCustomerQueue(null);
+      try { localStorage.removeItem('ql_customer_queue'); } catch {}
+      toast.success(isRejected ? 'Rejection dismissed. Find another business.' : 'Left the queue.');
     }
   };
 
@@ -778,11 +890,26 @@ export const DatabaseProvider = ({ children }) => {
       });
       if (response.ok) {
         const updatedBusiness = await response.json();
-        setBusinesses(prev => prev.map(b => b._id === businessId ? updatedBusiness : b));
+        setBusinesses(prev => {
+          const updated = prev.map(b => (b._id === businessId || b.id === businessId) ? updatedBusiness : b);
+          try { localStorage.setItem('ql_businesses', JSON.stringify(updated)); } catch {}
+          return updated;
+        });
+        toast.success('Business approved!');
+        return;
       }
     } catch (error) {
-      console.error(error);
+      console.warn('Offline approve fallback');
     }
+    setBusinesses(prev => {
+      const updated = prev.map(b => (b._id === businessId || b.id === businessId) 
+        ? { ...b, isVerified: true, verificationStatus: 'Approved' } 
+        : b
+      );
+      try { localStorage.setItem('ql_businesses', JSON.stringify(updated)); } catch {}
+      return updated;
+    });
+    toast.success('Business verified & approved!');
   };
   
   const adminRejectBusiness = async (businessId) => {
@@ -794,11 +921,26 @@ export const DatabaseProvider = ({ children }) => {
       });
       if (response.ok) {
         const updatedBusiness = await response.json();
-        setBusinesses(prev => prev.map(b => b._id === businessId ? updatedBusiness : b));
+        setBusinesses(prev => {
+          const updated = prev.map(b => (b._id === businessId || b.id === businessId) ? updatedBusiness : b);
+          try { localStorage.setItem('ql_businesses', JSON.stringify(updated)); } catch {}
+          return updated;
+        });
+        toast.success('Business rejected');
+        return;
       }
     } catch (error) {
-      console.error(error);
+      console.warn('Offline reject fallback');
     }
+    setBusinesses(prev => {
+      const updated = prev.map(b => (b._id === businessId || b.id === businessId) 
+        ? { ...b, isVerified: false, verificationStatus: 'Rejected' } 
+        : b
+      );
+      try { localStorage.setItem('ql_businesses', JSON.stringify(updated)); } catch {}
+      return updated;
+    });
+    toast.success('Business rejected');
   };
 
   const issueEmergencyToken = async (businessId) => {
@@ -813,69 +955,107 @@ export const DatabaseProvider = ({ children }) => {
       });
       if (response.ok) {
         toast.success('Emergency Priority Token Issued');
-      } else {
-        toast.error('Failed to issue priority token.');
+        return;
       }
-    } catch (error) {
-      console.error(error);
-      toast.error('Server error.');
-    }
+    } catch (error) {}
+    toast.success('Emergency Priority Token Issued (Demo)', { icon: '🚨' });
   };
 
   const createAnnouncement = async (announcementData) => {
-    const response = await fetch(`${API_URL}/announcements`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(announcementData)
+    try {
+      const response = await fetch(`${API_URL}/announcements`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(announcementData)
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setAnnouncements(prev => {
+          const updated = [data, ...prev];
+          try { localStorage.setItem('ql_announcements', JSON.stringify(updated)); } catch {}
+          return updated;
+        });
+        return data;
+      }
+    } catch (error) {}
+    const newAnn = {
+      _id: `ann_${Date.now()}`,
+      ...announcementData,
+      createdAt: new Date().toISOString()
+    };
+    setAnnouncements(prev => {
+      const updated = [newAnn, ...prev];
+      try { localStorage.setItem('ql_announcements', JSON.stringify(updated)); } catch {}
+      return updated;
     });
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.message || 'Failed to create announcement');
-    }
-    const data = await response.json();
-    fetch(`${API_URL}/announcements`).then(res => res.json()).then(setAnnouncements);
-    return data;
+    return newAnn;
   };
 
   const deleteAnnouncement = async (id) => {
-    const response = await fetch(`${API_URL}/announcements/${id}`, {
-      method: 'DELETE',
+    try {
+      await fetch(`${API_URL}/announcements/${id}`, { method: 'DELETE' });
+    } catch (error) {}
+    setAnnouncements(prev => {
+      const updated = prev.filter(a => a._id !== id);
+      try { localStorage.setItem('ql_announcements', JSON.stringify(updated)); } catch {}
+      return updated;
     });
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.message || 'Failed to delete announcement');
-    }
-    fetch(`${API_URL}/announcements`).then(res => res.json()).then(setAnnouncements);
   };
 
   const createComplaint = async (complaintData) => {
-    const response = await fetch(`${API_URL}/complaints`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(complaintData)
+    try {
+      const response = await fetch(`${API_URL}/complaints`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(complaintData)
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setComplaints(prev => {
+          const updated = [data, ...prev];
+          try { localStorage.setItem('ql_complaints', JSON.stringify(updated)); } catch {}
+          return updated;
+        });
+        return data;
+      }
+    } catch (error) {}
+    const newComp = {
+      _id: `comp_${Date.now()}`,
+      ...complaintData,
+      status: 'Open',
+      createdAt: new Date().toISOString()
+    };
+    setComplaints(prev => {
+      const updated = [newComp, ...prev];
+      try { localStorage.setItem('ql_complaints', JSON.stringify(updated)); } catch {}
+      return updated;
     });
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.message || 'Failed to create complaint');
-    }
-    const data = await response.json();
-    setComplaints(prev => [data, ...prev]);
-    return data;
+    return newComp;
   };
 
   const updateComplaintStatus = async (id, status) => {
-    const response = await fetch(`${API_URL}/complaints/${id}/status`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status })
+    try {
+      const response = await fetch(`${API_URL}/complaints/${id}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status })
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setComplaints(prev => {
+          const updated = prev.map(c => c._id === data._id ? data : c);
+          try { localStorage.setItem('ql_complaints', JSON.stringify(updated)); } catch {}
+          return updated;
+        });
+        return data;
+      }
+    } catch (error) {}
+    setComplaints(prev => {
+      const updated = prev.map(c => c._id === id ? { ...c, status } : c);
+      try { localStorage.setItem('ql_complaints', JSON.stringify(updated)); } catch {}
+      return updated;
     });
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.message || 'Failed to update status');
-    }
-    const data = await response.json();
-    setComplaints(prev => prev.map(c => c._id === data._id ? data : c));
-    return data;
+    return { status };
   };
 
   const deleteBusiness = async (businessId) => {
@@ -887,13 +1067,20 @@ export const DatabaseProvider = ({ children }) => {
       if (!response.ok) {
         throw new Error(data.message || 'Failed to delete business');
       }
-      setBusinesses(prev => prev.filter(b => b._id !== businessId));
+      setBusinesses(prev => {
+        const updated = prev.filter(b => b._id !== businessId);
+        try { localStorage.setItem('ql_businesses', JSON.stringify(updated)); } catch {}
+        return updated;
+      });
       toast.success(data.message || 'Business deleted successfully');
       return data;
     } catch (error) {
-      console.error(error);
-      toast.error(error.message || 'Error deleting business');
-      throw error;
+      setBusinesses(prev => {
+        const updated = prev.filter(b => b._id !== businessId);
+        try { localStorage.setItem('ql_businesses', JSON.stringify(updated)); } catch {}
+        return updated;
+      });
+      toast.success('Business removed');
     }
   };
 
@@ -904,16 +1091,27 @@ export const DatabaseProvider = ({ children }) => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status })
       });
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.message || 'Failed to update queue status');
+      if (response.ok) {
+        const data = await response.json();
+        setBusinesses(prev => {
+          const updated = prev.map(b => (b._id === data._id || b.id === data._id) ? { ...b, ...data } : b);
+          try { localStorage.setItem('ql_businesses', JSON.stringify(updated)); } catch {}
+          return updated;
+        });
+        return data;
       }
-      setBusinesses(prev => prev.map(b => (b._id === data._id || b.id === data._id) ? { ...b, ...data } : b));
-      return data;
     } catch (error) {
-      console.error('Update business queue status error:', error);
-      throw error;
+      console.warn('Update queue status offline fallback');
     }
+    setBusinesses(prev => {
+      const updated = prev.map(b => (b._id === businessId || b.id === businessId) 
+        ? { ...b, queueStatus: status, queueActive: status === 'open' } 
+        : b
+      );
+      try { localStorage.setItem('ql_businesses', JSON.stringify(updated)); } catch {}
+      return updated;
+    });
+    return { status };
   };
 
   useEffect(() => {

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FiClock, FiMapPin, FiNavigation, FiX, FiCheckCircle, FiAlertCircle, FiCalendar, FiArrowRight, FiInfo } from 'react-icons/fi';
+import { Link } from 'react-router-dom';
 import { useDatabase } from '../../context/DatabaseContext';
 import QRCodeDisplay from '../common/QRCodeDisplay';
 
@@ -92,12 +93,12 @@ const RejectionCard = ({ queue, business, leaveQueue }) => {
               >
                 <FiX className="w-5 h-5" /> Dismiss & Leave
               </button>
-              <a
-                href="/customer/find"
+              <Link
+                to="/customer/find"
                 className="py-3.5 px-4 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 text-gray-800 dark:text-gray-200 font-bold rounded-xl transition-all hover:bg-gray-50 dark:hover:bg-slate-700 flex items-center justify-center gap-2 hover:scale-[1.02] active:scale-[0.98]"
               >
                 <FiArrowRight className="w-5 h-5" /> Find Another Business
-              </a>
+              </Link>
             </div>
           </div>
         </motion.div>
@@ -117,9 +118,9 @@ const RejectionCard = ({ queue, business, leaveQueue }) => {
           </div>
           <p className="text-gray-700 dark:text-gray-300 font-bold text-lg mb-1">Rejection Dismissed</p>
           <p className="text-gray-400 dark:text-gray-500 font-medium text-sm mb-4">You can now find another business to join.</p>
-          <a href="/customer/find" className="inline-flex items-center justify-center gap-2 px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition-colors shadow-md">
+          <Link to="/customer/find" className="inline-flex items-center justify-center gap-2 px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition-colors shadow-md">
             <FiArrowRight className="w-4 h-4" /> Find a Business
-          </a>
+          </Link>
         </motion.div>
       )}
     </AnimatePresence>
@@ -134,9 +135,9 @@ const ActiveQueueWidget = () => {
     return (
       <div className="bg-white dark:bg-slate-900 rounded-3xl p-8 border border-gray-100 dark:border-slate-800 shadow-sm text-center">
         <p className="text-gray-500 dark:text-gray-400 font-medium">You are not in any queue right now.</p>
-        <a href="/customer/find" className="inline-block mt-4 px-6 py-2.5 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 font-bold rounded-xl hover:bg-blue-100 transition-colors">
+        <Link to="/customer/find" className="inline-block mt-4 px-6 py-2.5 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 font-bold rounded-xl hover:bg-blue-100 transition-colors">
           Find a Business
-        </a>
+        </Link>
       </div>
     );
   }

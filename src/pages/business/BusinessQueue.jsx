@@ -473,7 +473,22 @@ const BusinessQueue = () => {
         setHistoryQueue(histData.filter(q => ['completed', 'cancelled', 'missed', 'rejected'].includes(q.status)));
       }
     } catch (error) {
-      console.error('Failed to fetch active queue and history', error);
+      console.warn('Using demo active queue fallback');
+      const demoActive = [
+        { _id: 'tok_3', token: 'A-003', customerId: { name: 'Alice Walker', phone: '+1 (555) 010-0101' }, serviceName: 'General Consultation', status: 'waiting', bookedTime: '09:30 AM', joinTime: new Date(Date.now() - 3600000).toISOString() },
+        { _id: 'tok_4', token: 'A-004', customerId: { name: 'Bob Smith', phone: '+1 (555) 010-0102' }, serviceName: 'Pediatric Care', status: 'waiting', bookedTime: '09:45 AM', joinTime: new Date(Date.now() - 2700000).toISOString() },
+        { _id: 'tok_5', token: 'A-005', customerId: { name: 'Demo Customer', phone: '+1 (555) 012-3456' }, serviceName: 'General Consultation', status: 'waiting', bookedTime: '10:00 AM', isPriority: true, joinTime: new Date(Date.now() - 1200000).toISOString() },
+        { _id: 'tok_6', token: 'A-006', customerId: { name: 'Clara Oswald', phone: '+1 (555) 010-0104' }, serviceName: 'Diagnostic Lab', status: 'waiting', bookedTime: '10:15 AM', joinTime: new Date(Date.now() - 600000).toISOString() }
+      ];
+      const demoPending = [
+        { _id: 'tok_p1', token: 'A-007', customerId: { name: 'David Lee', phone: '+1 (555) 010-0105' }, serviceName: 'Cardiology Screening', status: 'pending_verification', joinTime: new Date(Date.now() - 300000).toISOString() }
+      ];
+      const demoHist = [
+        { _id: 'tok_h1', token: 'A-001', customerId: { name: 'Sarah Miller', phone: '+1 (555) 010-0100' }, serviceName: 'General Consultation', status: 'completed', waitTime: 12, completedAt: new Date(Date.now() - 7200000).toISOString() }
+      ];
+      setActiveQueue(demoActive);
+      setPendingQueue(demoPending);
+      setHistoryQueue(demoHist);
     } finally {
       setLoading(false);
     }
